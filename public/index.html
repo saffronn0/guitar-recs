@@ -68,6 +68,12 @@
   .links a { color: var(--accent); text-decoration: none; font-weight: 600; }
   .links a:hover { text-decoration: underline; }
   .note { color: var(--muted); font-size: 0.8rem; margin-top: 24px; }
+  details.sheet { border-top: 1px solid var(--line); padding-top: 8px; }
+  details.sheet summary { cursor: pointer; font-size: 0.85rem; font-weight: 600; color: var(--accent); }
+  .sections { display: grid; gap: 8px; margin-top: 10px; }
+  .section-name { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em;
+                  color: var(--muted); margin-bottom: 3px; }
+  .times { color: var(--muted); font-size: 0.8rem; align-self: center; }
 </style>
 </head>
 <body>
@@ -184,13 +190,43 @@
     return meta;
   }
 
-  // Free mode (no Claude): the song, its Songsterr tab info, and links.
+  function chordChips(names) {
+    const row = el("div", "chords");
+    names.forEach(ch => row.append(el("span", null, ch)));
+    return row;
+  }
+
+  // Expandable section-by-section chords worked out from the Songsterr tab.
+  function sheetDetails(sheet) {
+    const details = el("details", "sheet");
+    details.append(el("summary", null, sheet.capo ? `Chord sheet · capo ${sheet.capo}` : "Chord sheet"));
+    const list = el("div", "sections");
+    sheet.sections.forEach(section => {
+      const block = el("div");
+      const row = chordChips(section.chords);
+      if (section.times > 1) row.append(el("span", "times", `×${section.times}`));
+      block.append(el("div", "section-name", section.name), row);
+      list.append(block);
+    });
+    details.append(list);
+    return details;
+  }
+
+  // Free mode (no Claude): chords from the Songsterr tab, tab info, and links.
   function basicCard(song) {
     const c = el("article", "card");
     const titles = el("div");
     titles.append(el("h2", null, song.title), el("div", "artist", song.artist));
     c.append(titles);
     if (song.tab) c.append(tabMeta(song.tab, true));
+    if (song.sheet) {
+      const capo = el("div", "meta");
+      const sheet = song.sheet;
+      capo.append(el("span", null, !sheet.capo ? "Chords, no capo:"
+        : sheet.capo_suggested ? `Capo fret ${sheet.capo} (makes easier shapes) · play:`
+        : `Capo fret ${sheet.capo} · play:`));
+      c.append(capo, chordChips(song.sheet.chords), sheetDetails(song.sheet));
+    }
     c.append(el("p", "why", `Similar to ${song.similar_to.join(", ")}`), links(song));
     return c;
   }
@@ -217,6 +253,7 @@
     c.append(head, meta, chords, el("div", "pattern", song.pattern),
              el("div", "skill", song.skill), el("p", "why", song.why));
     if (song.tab) c.append(tabMeta(song.tab, false));
+    if (song.sheet) c.append(sheetDetails(song.sheet));
     c.append(links(song));
     return c;
   }
@@ -248,7 +285,7 @@
       const note = document.getElementById("note");
       note.textContent = data.detailed
         ? "Chords and patterns come from Claude and are usually right, but check the tab before learning a whole song."
-        : "Popular songs from similar artists that have a Songsterr tab at your level, easiest first. Difficulty is Songsterr's rating of the most-played guitar part (about 1 = easy strumming, 8 = shred).";
+        : "Popular songs from similar artists that have a Songsterr tab at your level, easiest first. Chords come from the tab: the tab author's chord names where they wrote them, otherwise worked out from the notes, which is right about 9 times in 10. Difficulty is Songsterr's rating of the most-played guitar part (about 1 = easy strumming, 8 = shred).";
       note.hidden = !data.songs.length;
       const missing = data.not_found.length ? ` Couldn't find: ${data.not_found.join(", ")}.` : "";
       setStatus(data.songs.length ? missing : "No good matches for that level. Try another level." + missing,

@@ -8,7 +8,7 @@ from flask import Flask, jsonify, request, send_from_directory
 
 from lastfm import Lastfm, gather_candidates, spread_picks
 from recommender import LEVELS, RecommendError, pick_songs
-from songsterr import LEVEL_DIFFICULTY, add_tabs, fits_level
+from songsterr import LEVEL_DIFFICULTY, add_chord_sheets, add_tabs, fits_level
 
 load_dotenv()
 
@@ -48,22 +48,32 @@ def recommend():
     except RecommendError as e:
         return jsonify(error=str(e)), 502
 
-    return jsonify(songs=add_tabs(songs), not_found=not_found, detailed=True)
+    return jsonify(songs=add_chord_sheets(add_tabs(songs)), not_found=not_found, detailed=True)
 
 
-def free_picks(candidates, level, count=12):
-    """Without Claude: songs whose Songsterr tab suits the level, spread across
-    artists, easiest first. If short, adds the tabbed songs closest to the
-    level after them."""
-    tabbed = [c for c in add_tabs(candidates) if c["tab"]]
-    picks = spread_picks([c for c in tabbed if fits_level(c, level)], count)
-    if len(picks) < count:
-        low, high = LEVEL_DIFFICULTY[level]
-        rest = sorted((c for c in tabbed if c not in picks),
-                      key=lambda c: max(low - (c["tab"]["difficulty"] or 0),
-                                        (c["tab"]["difficulty"] or 0) - high))
-        picks += rest[:count - len(picks)]
-    return sorted(picks, key=lambda c: (not fits_level(c, level), c["tab"]["difficulty"] or 0))
+def free_picks(candidates, level, count=12, batch=6):
+    """Without Claude: songs whose Songsterr tab suits the level and has
+    readable chords, spread across artists, easiest first. If short, adds
+    the songs closest to the level after them."""
+    # The same Songsterr song can come from two Last.fm artists (Silk Sonic and
+    # Bruno Mars both list Leave The Door Open), so keep one of each.
+    tabbed, seen = [], set()
+    for c in add_tabs(candidates):
+        if c["tab"] and c["tab"]["song_id"] not in seen:
+            seen.add(c["tab"]["song_id"])
+            tabbed.append(c)
+    in_level = spread_picks([c for c in tabbed if fits_level(c, level)], len(tabbed))
+    low, high = LEVEL_DIFFICULTY[level]
+    rest = sorted((c for c in tabbed if c not in in_level),
+                  key=lambda c: max(low - (c["tab"]["difficulty"] or 0),
+                                    (c["tab"]["difficulty"] or 0) - high))
+    # Load chords a batch at a time, best candidates first, until there are enough.
+    queue, picks = in_level + rest, []
+    while queue and len(picks) < count:
+        chunk, queue = queue[:batch], queue[batch:]
+        picks += [c for c in add_chord_sheets(chunk) if c["sheet"]]
+    return sorted(picks[:count],
+                  key=lambda c: (not fits_level(c, level), c["tab"]["difficulty"] or 0))
 
 
 def claude_configured():

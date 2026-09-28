@@ -25,7 +25,10 @@ Open http://localhost:5000.
 
 1. `lastfm.py` gets each input artist's similar artists and ranks them. Artists similar to more than one of your picks rank higher. It then collects the top tracks of the top 10.
 2. `recommender.py` sends those ~60 candidates to Claude (`claude-opus-5`, structured JSON output), which picks up to 12 that work for your level and orders them from easiest to hardest.
-3. `public/index.html` shows the picks as cards, with links to find the tab and a video lesson.
+3. `songsterr.py` looks up each song on Songsterr (free, no key) for a direct tab link, the difficulty of its most-played guitar part, and its tuning. In free mode, that difficulty is what matches songs to your level.
+4. `public/index.html` shows the picks as cards, with links to the Songsterr tab, a chord sheet search and a video lesson.
+
+Songsterr's search endpoint is unofficial, so if it changes or is down, songs just show without tab info.
 
 With Anthropic credentials set, each search makes one Claude call, which costs a few cents. Without them, step 2 is skipped (free mode).
 

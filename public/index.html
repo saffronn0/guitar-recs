@@ -156,20 +156,42 @@
   function links(song) {
     const q = encodeURIComponent(`${song.artist} ${song.title}`);
     const row = el("div", "links");
-    const tab = el("a", null, "Find tab ↗");
-    tab.href = `https://www.ultimate-guitar.com/search.php?search_type=title&value=${q}`;
+    const found = [];
+    if (song.tab) {
+      const tab = el("a", null, "Songsterr tab ↗");
+      tab.href = song.tab.url;
+      found.push(tab);
+    }
+    const sheet = el("a", null, "Chord sheet ↗");
+    sheet.href = `https://www.ultimate-guitar.com/search.php?search_type=title&value=${q}`;
     const lesson = el("a", null, "Video lesson ↗");
     lesson.href = `https://www.youtube.com/results?search_query=${q}+guitar+lesson`;
-    [tab, lesson].forEach(a => { a.target = "_blank"; a.rel = "noopener"; row.append(a); });
+    [...found, sheet, lesson].forEach(a => { a.target = "_blank"; a.rel = "noopener"; row.append(a); });
     return row;
   }
 
-  // Free mode (no Claude): just the song, who it's similar to, and links.
+  // "Tab difficulty 3 · Tuning Drop D · Acoustic Guitar" from Songsterr.
+  function tabMeta(tab, withDifficulty) {
+    const meta = el("div", "meta");
+    const item = (label, value) => {
+      const span = el("span", null, label ? `${label} ` : "");
+      span.append(el("b", null, value));
+      meta.append(span);
+    };
+    if (withDifficulty && tab.difficulty != null) item("Tab difficulty", tab.difficulty);
+    if (tab.tuning) item("Tuning", tab.tuning);
+    item("", tab.instrument.replace(/\s*\(.*\)/, ""));
+    return meta;
+  }
+
+  // Free mode (no Claude): the song, its Songsterr tab info, and links.
   function basicCard(song) {
     const c = el("article", "card");
     const titles = el("div");
     titles.append(el("h2", null, song.title), el("div", "artist", song.artist));
-    c.append(titles, el("p", "why", `Similar to ${song.similar_to.join(", ")}`), links(song));
+    c.append(titles);
+    if (song.tab) c.append(tabMeta(song.tab, true));
+    c.append(el("p", "why", `Similar to ${song.similar_to.join(", ")}`), links(song));
     return c;
   }
 
@@ -193,7 +215,9 @@
     song.chords.forEach(ch => chords.append(el("span", null, ch)));
 
     c.append(head, meta, chords, el("div", "pattern", song.pattern),
-             el("div", "skill", song.skill), el("p", "why", song.why), links(song));
+             el("div", "skill", song.skill), el("p", "why", song.why));
+    if (song.tab) c.append(tabMeta(song.tab, false));
+    c.append(links(song));
     return c;
   }
 
@@ -224,7 +248,7 @@
       const note = document.getElementById("note");
       note.textContent = data.detailed
         ? "Chords and patterns come from Claude and are usually right, but check the tab before learning a whole song."
-        : "Free mode: these are the most popular songs from similar artists, not sorted by level. Add Anthropic API credentials to get level-matched picks with chords.";
+        : "Popular songs from similar artists that have a Songsterr tab at your level, easiest first. Difficulty is Songsterr's rating of the most-played guitar part (about 1 = easy strumming, 8 = shred).";
       note.hidden = !data.songs.length;
       const missing = data.not_found.length ? ` Couldn't find: ${data.not_found.join(", ")}.` : "";
       setStatus(data.songs.length ? missing : "No good matches for that level. Try another level." + missing,
